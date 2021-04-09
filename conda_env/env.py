@@ -11,13 +11,15 @@ import json
 
 from conda.base.context import context
 from conda.cli import common  # TODO: this should never have to import form conda.cli
-from conda.common.serialize import yaml_load_standard
+from conda.common.compat import odict
+from conda.common.serialize import yaml_safe_load, yaml_safe_dump
 from conda.core.prefix_data import PrefixData
+from conda.gateways.connection.download import download_text
+from conda.gateways.connection.session import CONDA_SESSION_SCHEMES
 from conda.models.enums import PackageType
 from conda.models.match_spec import MatchSpec
 from conda.models.prefix_graph import PrefixGraph
-from conda_env.yaml import dump
-from . import compat, exceptions, yaml
+from . import compat, exceptions
 from conda.history import History
 
 try:
@@ -26,7 +28,7 @@ except ImportError:  # pragma: no cover
     from conda._vendor.toolz.itertoolz import concatv, groupby  # NOQA
 
 
-VALID_KEYS = ('name', 'dependencies', 'prefix', 'channels')
+VALID_KEYS = ('name', 'dependencies', 'prefix', 'channels', 'variables')
 
 
 def validate_keys(data, kwargs):
@@ -51,9 +53,10 @@ def validate_keys(data, kwargs):
 
     deps = data.get('dependencies', [])
     depsplit = re.compile(r"[<>~\s=]")
+    is_pip = lambda dep: 'pip' in depsplit.split(dep)[0].split('::')
+    lists_pip = any(is_pip(_) for _ in deps if not isinstance(_, dict))
     for dep in deps:
-        if (isinstance(dep, dict) and 'pip' in dep and not
-                any(depsplit.split(_)[0] == 'pip' for _ in deps if not hasattr(_, 'keys'))):
+        if (isinstance(dep, dict) and 'pip' in dep and not lists_pip):
             print("Warning: you have pip-installed dependencies in your environment file, "
                   "but you do not list pip itself as one of your conda dependencies.  Conda "
                   "may not use the correct pip to install your packages, and they may end up "
@@ -93,12 +96,14 @@ def from_environment(name, prefix, no_builds=False, ignore_channels=False, from_
     Returns:     Environment object
     """
     # requested_specs_map = History(prefix).get_requested_specs_map()
+    pd = PrefixData(prefix, pip_interop_enabled=True)
+    variables = pd.get_environment_env_vars()
+
     if from_history:
         history = History(prefix).get_requested_specs_map()
         deps = [str(package) for package in history.values()]
         return Environment(name=name, dependencies=deps, channels=list(context.channels),
-                           prefix=prefix)
-    pd = PrefixData(prefix, pip_interop_enabled=True)
+                           prefix=prefix, variables=variables)
 
     precs = tuple(PrefixGraph(pd.iter_records()).graph)
     grouped_precs = groupby(lambda x: x.package_type, precs)
@@ -128,12 +133,13 @@ def from_environment(name, prefix, no_builds=False, ignore_channels=False, from_
             canonical_name = prec.channel.canonical_name
             if canonical_name not in channels:
                 channels.insert(0, canonical_name)
-    return Environment(name=name, dependencies=dependencies, channels=channels, prefix=prefix)
+    return Environment(name=name, dependencies=dependencies, channels=channels, prefix=prefix,
+                       variables=variables)
 
 
 def from_yaml(yamlstr, **kwargs):
     """Load and return a ``Environment`` from a given ``yaml string``"""
-    data = yaml_load_standard(yamlstr)
+    data = yaml_safe_load(yamlstr)
     data = validate_keys(data, kwargs)
 
     if kwargs is not None:
@@ -144,11 +150,19 @@ def from_yaml(yamlstr, **kwargs):
 
 
 def from_file(filename):
-    if not os.path.exists(filename):
+    url_scheme = filename.split("://", 1)[0]
+    if url_scheme in CONDA_SESSION_SCHEMES:
+        yamlstr = download_text(filename)
+    elif not os.path.exists(filename):
         raise exceptions.EnvironmentFileNotFound(filename)
-    with open(filename, 'r') as fp:
-        yamlstr = fp.read()
-        return from_yaml(yamlstr, filename=filename)
+    else:
+        with open(filename, 'rb') as fp:
+            yamlb = fp.read()
+            try:
+                yamlstr = yamlb.decode('utf-8')
+            except UnicodeDecodeError:
+                yamlstr = yamlb.decode('utf-16')
+    return from_yaml(yamlstr, filename=filename)
 
 
 # TODO test explicitly
@@ -209,11 +223,12 @@ def unique(seq, key=None):
 
 class Environment(object):
     def __init__(self, name=None, filename=None, channels=None,
-                 dependencies=None, prefix=None):
+                 dependencies=None, prefix=None, variables=None):
         self.name = name
         self.filename = filename
         self.prefix = prefix
         self.dependencies = Dependencies(dependencies)
+        self.variables = variables
 
         if channels is None:
             channels = []
@@ -226,11 +241,13 @@ class Environment(object):
         self.channels = []
 
     def to_dict(self, stream=None):
-        d = yaml.dict([('name', self.name)])
+        d = odict([('name', self.name)])
         if self.channels:
             d['channels'] = self.channels
         if self.dependencies:
             d['dependencies'] = self.dependencies.raw
+        if self.variables:
+            d['variables'] = self.variables
         if self.prefix:
             d['prefix'] = self.prefix
         if stream is None:
@@ -239,7 +256,7 @@ class Environment(object):
 
     def to_yaml(self, stream=None):
         d = self.to_dict()
-        out = compat.u(dump(d))
+        out = compat.u(yaml_safe_dump(d))
         if stream is None:
             return out
         stream.write(compat.b(out, encoding="utf-8"))

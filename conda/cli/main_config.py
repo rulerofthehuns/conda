@@ -21,7 +21,7 @@ from ..common.compat import (Mapping, Sequence, isiterable, iteritems, itervalue
                              text_type)
 from ..common.configuration import pretty_list, pretty_map
 from ..common.io import timeout
-from ..common.serialize import yaml, yaml_dump, yaml_load
+from ..common.serialize import yaml, yaml_round_trip_dump, yaml_round_trip_load
 
 
 def execute(args, parser):
@@ -76,7 +76,7 @@ def parameter_description_builder(name):
     builder.append('')
     builder = ['# ' + line for line in builder]
 
-    builder.extend(yaml_dump({name: json.loads(default_value_str)}).strip().split('\n'))
+    builder.extend(yaml_round_trip_dump({name: json.loads(default_value_str)}).strip().split('\n'))
 
     builder = ['# ' + line for line in builder]
     builder.append('')
@@ -99,6 +99,28 @@ def describe_all_parameters():
     return '\n'.join(builder)
 
 
+def print_config_item(key, value):
+    stdout_write = getLogger("conda.stdout").info
+    if isinstance(value, (dict,)):
+        for k, v in value.items():
+            print_config_item(key + "." + k, v)
+    elif isinstance(value, (bool, int, string_types)):
+        stdout_write(" ".join(("--set", key, text_type(value))))
+    elif isinstance(value, (list, tuple)):
+        # Note, since `conda config --add` prepends, print `--add` commands in
+        # reverse order (using repr), so that entering them in this order will
+        # recreate the same file.
+        numitems = len(value)
+        for q, item in enumerate(reversed(value)):
+            if key == "channels" and q in (0, numitems-1):
+                stdout_write(" ".join((
+                    "--add", key, repr(item),
+                    "  # lowest priority" if q == 0 else "  # highest priority"
+                )))
+            else:
+                stdout_write(" ".join(("--add", key, repr(item))))
+
+
 def execute_config(args, parser):
     stdout_write = getLogger("conda.stdout").info
     stderr_write = getLogger("conda.stderr").info
@@ -107,9 +129,10 @@ def execute_config(args, parser):
 
     if args.show_sources:
         if context.json:
-            stdout_write(
-                json.dumps(context.collect_all(), sort_keys=True, indent=2, separators=(',', ': '))
-            )
+            stdout_write(json.dumps(
+                context.collect_all(), sort_keys=True, indent=2, separators=(',', ': '),
+                cls=EntityEncoder
+            ))
         else:
             lines = []
             for source, reprs in iteritems(context.collect_all()):
@@ -222,7 +245,12 @@ def execute_config(args, parser):
     # read existing condarc
     if os.path.exists(rc_path):
         with open(rc_path, 'r') as fh:
-            rc_config = yaml_load(fh) or {}
+            # round trip load required because... we need to round trip
+            rc_config = yaml_round_trip_load(fh) or {}
+    elif os.path.exists(sys_rc_path):
+        # In case the considered rc file doesn't exist, fall back to the system rc
+        with open(sys_rc_path, 'r') as fh:
+            rc_config = yaml_round_trip_load(fh) or {}
     else:
         rc_config = {}
 
@@ -231,51 +259,48 @@ def execute_config(args, parser):
     primitive_parameters = grouped_paramaters['primitive']
     sequence_parameters = grouped_paramaters['sequence']
     map_parameters = grouped_paramaters['map']
+    all_parameters = primitive_parameters + sequence_parameters + map_parameters
 
     # Get
     if args.get is not None:
         context.validate_all()
         if args.get == []:
             args.get = sorted(rc_config.keys())
+
+        value_not_found = object()
         for key in args.get:
-            if key not in primitive_parameters + sequence_parameters:
-                message = "unknown key %s" % key
+            key_parts = key.split(".")
+
+            if key_parts[0] not in all_parameters:
+                message = "unknown key %s" % key_parts[0]
                 if not context.json:
                     stderr_write(message)
                 else:
                     json_warnings.append(message)
                 continue
-            if key not in rc_config:
-                continue
 
-            if context.json:
-                json_get[key] = rc_config[key]
-                continue
+            remaining_rc_config = rc_config
+            for k in key_parts:
+                if k in remaining_rc_config:
+                    remaining_rc_config = remaining_rc_config[k]
+                else:
+                    remaining_rc_config = value_not_found
+                    break
 
-            if isinstance(rc_config[key], (bool, int, string_types)):
-                stdout_write(" ".join(("--set", key, text_type(rc_config[key]))))
-            else:  # assume the key is a list-type
-                # Note, since conda config --add prepends, these are printed in
-                # the reverse order so that entering them in this order will
-                # recreate the same file
-                items = rc_config.get(key, [])
-                numitems = len(items)
-                for q, item in enumerate(reversed(items)):
-                    # Use repr so that it can be pasted back in to conda config --add
-                    if key == "channels" and q in (0, numitems-1):
-                        stdout_write(" ".join((
-                            "--add", key, repr(item),
-                            "  # lowest priority" if q == 0 else "  # highest priority"
-                        )))
-                    else:
-                        stdout_write(" ".join(("--add", key, repr(item))))
+            if remaining_rc_config is value_not_found:
+                pass
+            elif context.json:
+                json_get[key] = remaining_rc_config
+            else:
+                print_config_item(key, remaining_rc_config)
 
     if args.stdin:
         content = timeout(5, sys.stdin.read)
         if not content:
             return
         try:
-            parsed = yaml_load(content)
+            # round trip load required because... we need to round trip
+            parsed = yaml_round_trip_load(content)
             rc_config.update(parsed)
         except Exception:  # pragma: no cover
             from ..exceptions import ParseError
@@ -347,7 +372,7 @@ def execute_config(args, parser):
 
         # Add representers for enums.
         # Because a representer cannot be added for the base Enum class (it must be added for
-        # each specific Enum subclass), and because of import rules), I don't know of a better
+        # each specific Enum subclass - and because of import rules), I don't know of a better
         # location to do this.
         def enum_representer(dumper, data):
             return dumper.represent_str(str(data))
@@ -361,7 +386,7 @@ def execute_config(args, parser):
 
         try:
             with open(rc_path, 'w') as rc:
-                rc.write(yaml_dump(rc_config))
+                rc.write(yaml_round_trip_dump(rc_config))
         except (IOError, OSError) as e:
             raise CondaError('Cannot write to condarc file at %s\n'
                              'Caused by %r' % (rc_path, e))

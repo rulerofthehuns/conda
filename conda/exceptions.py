@@ -677,14 +677,13 @@ explicit spec that is not an explicit spec in this operation ({ref}):\n{specs}
                     '''),
                     'direct': dals('''
 
-The following specifications were found to be incompatible with each other:\n
-
+The following specifications were found to be incompatible with each other:
                     '''),
-                    'cuda': dals('''
+                    'virtual_package': dals('''
 
-The following specifications were found to be incompatible with your CUDA driver:\n{specs}
+The following specifications were found to be incompatible with your system:\n{specs}
 
-Your installed CUDA driver is: {ref}
+Your installed version is: {ref}
 ''')}
 
         msg = ""
@@ -708,9 +707,11 @@ conda config --set unsatisfiable_hints True
                                 if not dep_constraint_map.get(dep[0][-1].name):
                                     dep_constraint_map[dep[0][-1].name] = []
                                 dep_constraint_map[dep[0][-1].name].append(dep[0])
+                        msg += "\nOutput in format: Requested package -> Available versions"
                         for dep, chain in dep_constraint_map.items():
-                            msg += "\nPackage %s conflicts for:\n" % dep
-                            msg += "\n".join([" -> ".join([str(i) for i in c]) for c in chain])
+                            if len(chain) > 1:
+                                msg += "\n\nPackage %s conflicts for:\n" % dep
+                                msg += "\n".join([" -> ".join([str(i) for i in c]) for c in chain])
                     else:
                         for dep_chain, installed_blocker in dep_class:
                             # Remove any target values from the MatchSpecs, convert to strings
@@ -1368,5 +1369,4 @@ class ExceptionHandler(object):
 def conda_exception_handler(func, *args, **kwargs):
     exception_handler = ExceptionHandler()
     return_value = exception_handler(func, *args, **kwargs)
-    if isinstance(return_value, int):
-        return return_value
+    return return_value

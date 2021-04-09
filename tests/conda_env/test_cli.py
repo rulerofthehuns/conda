@@ -1,25 +1,23 @@
 import json
 import os
-from conda._vendor.auxlib.compat import Utf8NamedTemporaryFile
-import unittest
 
 import pytest
+import unittest
 
+from conda._vendor.auxlib.compat import Utf8NamedTemporaryFile
 from conda.base.constants import ROOT_ENV_NAME
 from conda.base.context import context
 from conda.cli.conda_argparse import do_call
 from conda.cli.main import generate_parser
+from conda.common.compat import odict
 from conda.common.io import captured
+from conda.common.serialize import yaml_safe_load
 from conda.core.envs_manager import list_all_known_prefixes
+from conda.exceptions import EnvironmentLocationNotFound
 from conda.install import rm_rf
 from conda.utils import massage_arguments
-from conda.exceptions import EnvironmentLocationNotFound
 from conda_env.cli.main import create_parser, do_call as do_call_conda_env
-from conda_env.exceptions import EnvironmentFileExtensionNotValid, EnvironmentFileNotFound
-from conda_env.yaml import load as yaml_load
-from conda_env.yaml import odict
-
-from . import support_file
+from conda_env.exceptions import CondaEnvException, EnvironmentFileExtensionNotValid, EnvironmentFileNotFound
 
 environment_1 = '''
 name: env-1
@@ -27,6 +25,17 @@ dependencies:
   - python
 channels:
   - defaults
+'''
+
+environment_1_with_variables = '''
+name: env-1
+dependencies:
+  - python
+channels:
+  - defaults
+variables:
+  DUDE: woah
+  SWEET: yaaa
 '''
 
 environment_2 = '''
@@ -71,9 +80,21 @@ channels:
   - defaults
 '''
 
+environment_python_pip_nonexisting = '''
+name: env-1
+dependencies:
+  - python=3
+  - pip
+  - pip:
+    - nonexisting_
+channels:
+  - defaults
+'''
+
 test_env_name_1 = "env-1"
 test_env_name_2 = "snowflakes"
 test_env_name_42 = "env-42"
+test_env_name_pip = "env-pip"
 
 
 def escape_for_winpath(p):
@@ -173,6 +194,7 @@ class IntegrationTests(unittest.TestCase):
         rm_rf("environment.yml")
         run_env_command(Commands.ENV_REMOVE, test_env_name_1)
         run_env_command(Commands.ENV_REMOVE, test_env_name_42)
+        run_env_command(Commands.ENV_REMOVE, test_env_name_pip)
         for env_nb in range(1, 6):
             run_env_command(Commands.ENV_REMOVE, "envjson-{0}".format(env_nb))
 
@@ -180,6 +202,7 @@ class IntegrationTests(unittest.TestCase):
         rm_rf("environment.yml")
         run_env_command(Commands.ENV_REMOVE, test_env_name_1)
         run_env_command(Commands.ENV_REMOVE, test_env_name_42)
+        run_env_command(Commands.ENV_REMOVE, test_env_name_pip)
         for env_nb in range(1, 6):
              run_env_command(Commands.ENV_REMOVE, "envjson-{0}".format(env_nb))
 
@@ -229,6 +252,42 @@ class IntegrationTests(unittest.TestCase):
         self.assertNotEqual(
             len([env for env in parsed['envs'] if env.endswith(test_env_name_1)]), 0
         )
+
+    def test_create_valid_env_with_variables(self):
+        '''
+        Creates an environment.yml file and
+        creates and environment with it
+        '''
+
+        create_env(environment_1_with_variables)
+        run_env_command(Commands.ENV_CREATE, None)
+        self.assertTrue(env_is_created(test_env_name_1))
+
+        o, e = run_env_command(Commands.ENV_CONFIG, test_env_name_1, "vars", "list", "--json", '-n', test_env_name_1)
+        output_env_vars = json.loads(o)
+        assert output_env_vars == {'DUDE': 'woah', "SWEET": "yaaa"}
+
+        o, e = run_conda_command(Commands.INFO, None, "--json")
+        parsed = json.loads(o)
+        self.assertNotEqual(
+            len([env for env in parsed['envs'] if env.endswith(test_env_name_1)]), 0
+        )
+
+    @pytest.mark.integration
+    def test_conda_env_create_http(self):
+        '''
+        Test `conda env create --file=https://some-website.com/environment.yml`
+        '''
+        run_env_command(
+            Commands.ENV_CREATE,
+            None,
+            '--file',
+            'https://raw.githubusercontent.com/conda/conda/master/tests/conda_env/support/simple.yml',
+        )
+        try:
+            self.assertTrue(env_is_created("nlp"))
+        finally:
+            run_env_command(Commands.ENV_REMOVE, "nlp")
 
     def test_update(self):
         create_env(environment_1)
@@ -333,6 +392,14 @@ class IntegrationTests(unittest.TestCase):
         output = json.loads(stdout)
         assert output["message"] == "All requested packages already installed."
 
+    def test_remove_dry_run(self):
+        # Test for GH-10231
+        create_env(environment_1)
+        run_env_command(Commands.ENV_CREATE, None)
+        env_name = "env-1"
+        run_env_command(Commands.ENV_REMOVE, env_name, "--dry-run")
+        self.assertTrue(env_is_created(env_name))
+
     def test_set_unset_env_vars(self):
         create_env(environment_1)
         run_env_command(Commands.ENV_CREATE, None)
@@ -356,6 +423,15 @@ class IntegrationTests(unittest.TestCase):
         except Exception as e:
             self.assertIsInstance(e, EnvironmentLocationNotFound)
 
+    def test_pip_error_is_propagated(self):
+        """
+        Creates an environment from an environment.yml file with conda and incorrect pip dependencies
+        The output must clearly show pip error.
+        Check the json output
+        """
+        create_env(environment_python_pip_nonexisting)
+        with pytest.raises(CondaEnvException, match="Pip failed"):
+            run_env_command(Commands.ENV_CREATE, test_env_name_pip)
 
 def env_is_created(env_name):
     """
@@ -420,10 +496,42 @@ class NewIntegrationTests(unittest.TestCase):
             # regression test for #6220
             snowflake, e, = run_env_command(Commands.ENV_EXPORT, test_env_name_2, '--no-builds')
             assert not e.strip()
-            env_description = yaml_load(snowflake)
+            env_description = yaml_safe_load(snowflake)
             assert len(env_description['dependencies'])
             for spec_str in env_description['dependencies']:
                 assert spec_str.count('=') == 1
+            
+
+        run_env_command(Commands.ENV_REMOVE, test_env_name_2)
+        assert not env_is_created(test_env_name_2)
+
+    def test_env_export_with_variables(self):
+        """
+            Test conda env export
+        """
+
+        run_conda_command(Commands.CREATE, test_env_name_2, "flask")
+        assert env_is_created(test_env_name_2)
+
+        run_env_command(Commands.ENV_CONFIG, test_env_name_2, "vars", "set", "DUDE=woah", "SWEET=yaaa", "-n", test_env_name_2)
+
+        snowflake, e, = run_env_command(Commands.ENV_EXPORT, test_env_name_2)
+
+        with Utf8NamedTemporaryFile(mode="w", suffix=".yml", delete=False) as env_yaml:
+            env_yaml.write(snowflake)
+            env_yaml.flush()
+            env_yaml.close()
+
+            run_env_command(Commands.ENV_REMOVE, test_env_name_2)
+            self.assertFalse(env_is_created(test_env_name_2))
+            run_env_command(Commands.ENV_CREATE, None, "--file", env_yaml.name)
+            self.assertTrue(env_is_created(test_env_name_2))
+
+            snowflake, e = run_env_command(Commands.ENV_EXPORT, test_env_name_2, '--no-builds')
+            assert not e.strip()
+            env_description = yaml_safe_load(snowflake)
+            assert len(env_description['variables'])
+            assert env_description['variables'].keys()
 
         run_env_command(Commands.ENV_REMOVE, test_env_name_2)
         assert not env_is_created(test_env_name_2)

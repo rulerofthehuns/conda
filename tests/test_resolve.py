@@ -316,10 +316,12 @@ def test_unsat_from_r1():
     assert "numpy=1.5" in str(excinfo.value)
     assert "scipy==0.12.0b1 -> numpy[version='1.6.*|1.7.*']" in str(excinfo.value)
     # numpy 1.5 does not have a python 3 package
+
     with pytest.raises(UnsatisfiableError) as excinfo:
         r.install(['numpy 1.5*', 'python 3*'])
     assert "numpy=1.5 -> python[version='2.6.*|2.7.*']" in str(excinfo.value)
     assert "python=3" in str(excinfo.value)
+
     with pytest.raises(UnsatisfiableError) as excinfo:
         r.install(['numpy 1.5*', 'numpy 1.6*'])
     assert "numpy=1.5" in str(excinfo.value)
@@ -420,6 +422,22 @@ def test_unsat_shortest_chain_3():
     assert "c=1.3.6" in str(excinfo.value)
 
 
+def test_unsat_shortest_chain_4():
+    index = (
+        simple_rec(name='a', depends=['py =3.7.1']),
+        simple_rec(name="py_req_1"),
+        simple_rec(name="py_req_2"),
+        simple_rec(name='py', version='3.7.1', depends=['py_req_1', 'py_req_2']),
+        simple_rec(name='py', version='3.6.1', depends=['py_req_1', 'py_req_2']),
+    )
+    r = Resolve(OrderedDict((prec, prec) for prec in index))
+    with pytest.raises(UnsatisfiableError) as excinfo:
+        r.install(['a', 'py=3.6.1'])
+    print(str(excinfo.value))
+    assert "a -> py=3.7.1" in str(excinfo.value)
+    assert "py=3.6.1" in str(excinfo.value)
+    assert "py=3.6.1 -> py_req_2" not in str(excinfo.value)
+
 def test_unsat_chain():
     # a -> b -> c=1.x -> d=1.x
     # e      -> c=2.x -> d=2.x
@@ -436,8 +454,8 @@ def test_unsat_chain():
     r = Resolve(OrderedDict((prec, prec) for prec in index))
     with pytest.raises(UnsatisfiableError) as excinfo:
         r.install(['a', 'e'])
-    assert "a -> b -> c[version='>=1,<2'] -> d[version='>=1,<2']" in str(excinfo.value)
-    assert "e -> c[version='>=2,<3'] -> d[version='>=2,<3']" in str(excinfo.value)
+    assert "a -> b -> c[version='>=1,<2']" in str(excinfo.value)
+    assert "e -> c[version='>=2,<3']" in str(excinfo.value)
 
 
 def test_unsat_any_two_not_three():
@@ -472,6 +490,7 @@ def test_unsat_any_two_not_three():
     # a, b and c cannot be installed
     with pytest.raises(UnsatisfiableError) as excinfo:
         r.install(['a', 'b', 'c'])
+
     assert "a -> d[version='>=1,<2|>=2,<3']" in str(excinfo.value)
     assert "b -> d[version='>=1,<2|>=3,<4']" in str(excinfo.value)
     assert "c -> d[version='>=2,<3|>=3,<4']" in str(excinfo.value)
@@ -1871,6 +1890,42 @@ def test_update_deps():
         'channel-1::tk-8.5.13-0',
         'channel-1::zlib-1.2.7-0',
     ])
+
+
+def test_fast_error_on_unsat():
+    installed = r.install(["zope.interface=4.1.1"])
+    result = [rec.dist_str() for rec in installed]
+
+    assert result == add_subdir_to_iter([
+        'channel-1::nose-1.3.0-py33_0',
+        'channel-1::openssl-1.0.1c-0',
+        'channel-1::python-3.3.2-0',
+        'channel-1::readline-6.2-0',
+        'channel-1::sqlite-3.7.13-0',
+        'channel-1::system-5.8-1',
+        'channel-1::tk-8.5.13-0',
+        'channel-1::zlib-1.2.7-0',
+        "channel-1::zope.interface-4.1.1.1-py33_0",
+    ])
+
+    _installed = r.install(['python 2.7*'], installed=installed)
+    result = [rec.dist_str() for rec in _installed]
+    assert result == add_subdir_to_iter([
+        'channel-1::nose-1.3.0-py27_0',
+        'channel-1::openssl-1.0.1c-0',
+        'channel-1::python-2.7.5-0',
+        'channel-1::readline-6.2-0',
+        'channel-1::sqlite-3.7.13-0',
+        'channel-1::system-5.8-1',
+        'channel-1::tk-8.5.13-0',
+        'channel-1::zlib-1.2.7-0',
+        'channel-1::zope.interface-4.0.5-py27_0',
+    ])
+
+    r._reduced_index_cache.clear()
+    with env_var("CONDA_UNSATISFIABLE_HINTS", "False", stack_callback=conda_tests_ctxt_mgmt_def_pol):
+        with pytest.raises(UnsatisfiableError):
+            _installed = r.install(["python 2.7*"], installed=installed)
 
 
 def test_surplus_features_1():

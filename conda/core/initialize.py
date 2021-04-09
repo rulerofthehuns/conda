@@ -41,6 +41,7 @@ from os.path import abspath, basename, dirname, exists, expanduser, isdir, isfil
 from random import randint
 import re
 import sys
+import struct
 
 try:
     FileNotFoundError
@@ -449,7 +450,10 @@ def make_initialize_plan(conda_prefix, shells, for_user, for_system, anaconda_pr
             })
 
         if 'zsh' in shells and for_user:
-            zshrc_path = expand(join('~', '.zshrc'))
+            if 'ZDOTDIR' in os.environ:
+                zshrc_path = expand(join("$ZDOTDIR", ".zshrc"))
+            else:
+                zshrc_path = expand(join('~', '.zshrc'))
             plan.append({
                 'function': init_sh_user.__name__,
                 'kwargs': {
@@ -788,7 +792,7 @@ def make_entry_point(target_path, conda_prefix, module, func):
 def make_entry_point_exe(target_path, conda_prefix):
     # target_path: join(conda_prefix, 'Scripts', 'conda.exe')
     exe_path = target_path
-    bits = 8 * tuple.__itemsize__
+    bits = 8 * struct.calcsize("P")
     source_exe_path = join(CONDA_PACKAGE_ROOT, 'shell', 'cli-%d.exe' % bits)
     if isfile(exe_path):
         if compute_md5sum(exe_path) == compute_md5sum(source_exe_path):
@@ -1416,28 +1420,46 @@ def init_cmd_exe_registry(target_path, conda_prefix, reverse=False):
         prev_value = ""
         value_type = winreg.REG_EXPAND_SZ
 
-    hook_path = '"%s"' % join(conda_prefix, 'condabin', 'conda_hook.bat')
+    old_hook_path = '"{}"'.format(join(conda_prefix, 'condabin', 'conda_hook.bat'))
+    new_hook = 'if exist {hp} {hp}'.format(hp=old_hook_path)
     if reverse:
         # we can't just reset it to None and remove it, because there may be other contents here.
         #   We need to strip out our part, and if there's nothing left, remove the key.
         # Break up string by parts joined with "&"
         autorun_parts = prev_value.split('&')
-        new_value = " & ".join(part.strip() for part in autorun_parts if hook_path not in part)
+        autorun_parts = [part.strip() for part in autorun_parts if new_hook not in part]
+        # We must remove the old hook path too if it is there
+        autorun_parts = [part.strip() for part in autorun_parts if old_hook_path not in part]
+        new_value = " & ".join(autorun_parts)
     else:
         replace_str = "__CONDA_REPLACE_ME_123__"
+        # Replace new (if exist checked) hook
         new_value = re.sub(
-            r'(\"[^\"]*?conda[-_]hook\.bat\")',
+            r'(if exist \"[^\"]*?conda[-_]hook\.bat\" \"[^\"]*?conda[-_]hook\.bat\")',
             replace_str,
             prev_value,
             count=1,
             flags=re.IGNORECASE | re.UNICODE,
         )
-        new_value = new_value.replace(replace_str, hook_path)
-        if hook_path not in new_value:
+        # Replace old hook
+        new_value = re.sub(
+            r'(\"[^\"]*?conda[-_]hook\.bat\")',
+            replace_str,
+            new_value,
+            flags=re.IGNORECASE | re.UNICODE,
+        )
+
+        # Fold repeats of 'HOOK & HOOK'
+        new_value_2 = new_value.replace(replace_str + ' & ' + replace_str, replace_str)
+        while new_value_2 != new_value:
+            new_value = new_value_2
+            new_value_2 = new_value.replace(replace_str + ' & ' + replace_str, replace_str)
+        new_value = new_value_2.replace(replace_str, new_hook)
+        if new_hook not in new_value:
             if new_value:
-                new_value += ' & ' + hook_path
+                new_value += ' & ' + new_hook
             else:
-                new_value = hook_path
+                new_value = new_hook
 
     if prev_value != new_value:
         if context.verbosity:

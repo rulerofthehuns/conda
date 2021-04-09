@@ -105,6 +105,7 @@ def get_info_dict(system=False):
         from requests import __version__ as requests_version
         # These environment variables can influence requests' behavior, along with configuration
         # in a .netrc file
+        #   CURL_CA_BUNDLE
         #   REQUESTS_CA_BUNDLE
         #   HTTP_PROXY
         #   HTTPS_PROXY
@@ -132,7 +133,7 @@ def get_info_dict(system=False):
 
     virtual_pkg_index = {}
     _supplement_index_with_system(virtual_pkg_index)
-    virtual_pkgs = [[p.name, p.version] for p in virtual_pkg_index.values()]
+    virtual_pkgs = [[p.name, p.version, p.build] for p in virtual_pkg_index.values()]
 
     channels = list(all_channel_urls(context.channels))
     if not context.json:
@@ -159,6 +160,8 @@ def get_info_dict(system=False):
         root_prefix=context.root_prefix,
         conda_prefix=context.conda_prefix,
         conda_private=conda_in_private_env(),
+        av_data_dir=context.av_data_dir,
+        av_metadata_url_base=context.signing_metadata_url_base,
         root_writable=context.root_writable,
         pkgs_dirs=context.pkgs_dirs,
         envs_dirs=context.envs_dirs,
@@ -190,6 +193,7 @@ def get_info_dict(system=False):
 
     env_var_keys = {
         'CIO_TEST',
+        'CURL_CA_BUNDLE',
         'REQUESTS_CA_BUNDLE',
         'SSL_CERT_FILE',
     }
@@ -236,7 +240,7 @@ def get_main_info_str(info_dict):
         info_dict['_' + key] = ('\n' + 26 * ' ').join(info_dict[key])
 
     info_dict['_virtual_pkgs'] = ('\n' + 26 * ' ').join([
-        '%s=%s' % tuple(x) for x in info_dict['virtual_pkgs']])
+        '%s=%s=%s' % tuple(x) for x in info_dict['virtual_pkgs']])
     info_dict['_rtwro'] = ('writable' if info_dict['root_writable'] else 'read only')
 
     format_param = lambda nm, val: "%23s : %s" % (nm, val)
@@ -261,6 +265,8 @@ def get_main_info_str(info_dict):
         format_param('virtual packages', info_dict['_virtual_pkgs']),
         format_param('base environment', '%s  (%s)' % (info_dict['root_prefix'],
                                                        info_dict['_rtwro'])),
+        format_param('conda av data dir', info_dict['av_data_dir']),
+        format_param('conda av metadata url', info_dict['av_metadata_url_base']),
         format_param('channel URLs', info_dict['_channels']),
         format_param('package cache', info_dict['_pkgs_dirs']),
         format_param('envs directories', info_dict['_envs_dirs']),

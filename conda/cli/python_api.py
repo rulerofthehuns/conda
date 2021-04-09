@@ -43,8 +43,8 @@ def run_command(command, *arguments, **kwargs):
 
     Args:
         command: one of the Commands.
-        *arguments: instructions you would normally pass to the conda comamnd on the command line
-                    see below for examples. Be very careful to delimit arguements exactly as you
+        *arguments: instructions you would normally pass to the conda command on the command line
+                    see below for examples. Be very careful to delimit arguments exactly as you
                     want them to be delivered. No 'combine then split at spaces' or other
                     information destroying processing gets performed on the arguments.
         **kwargs: special instructions for programmatic overrides
@@ -96,16 +96,29 @@ def run_command(command, *arguments, **kwargs):
 
     from subprocess import list2cmdline
     log.debug("executing command >>>  conda %s", list2cmdline(arguments))
+
+    is_run = arguments[0] == 'run'
+    if is_run:
+        cap_args = (None, None)
+    else:
+        cap_args = (stdout, stderr)
     try:
-        with argv(['python_api'] + encode_arguments(arguments)), captured(stdout, stderr) as c:
+        with argv(['python_api'] + encode_arguments(arguments)), captured(*cap_args) as c:
             if use_exception_handler:
-                return_code = conda_exception_handler(do_call, args, p)
+                result = conda_exception_handler(do_call, args, p)
             else:
-                return_code = do_call(args, p)
+                result = do_call(args, p)
+        if is_run:
+            stdout = result.stdout
+            stderr = result.stderr
+            result = result.rc
+        else:
+            stdout = c.stdout
+            stderr = c.stderr
     except Exception as e:
-        log.debug("\n  stdout: %s\n  stderr: %s", c.stdout, c.stderr)
-        e.stdout, e.stderr = c.stdout, c.stderr
+        log.debug("\n  stdout: %s\n  stderr: %s", stdout, stderr)
+        e.stdout, e.stderr = stdout, stderr
         raise e
-    return_code = return_code or 0
-    log.debug("\n  stdout: %s\n  stderr: %s\n  return_code: %s", c.stdout, c.stderr, return_code)
-    return c.stdout, c.stderr, return_code
+    return_code = result or 0
+    log.debug("\n  stdout: %s\n  stderr: %s\n  return_code: %s", stdout, stderr, return_code)
+    return stdout, stderr, return_code

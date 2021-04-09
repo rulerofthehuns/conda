@@ -55,6 +55,7 @@ def generate_parser():
     sub_parsers.required = True
 
     configure_parser_clean(sub_parsers)
+    configure_parser_compare(sub_parsers)
     configure_parser_config(sub_parsers)
     configure_parser_create(sub_parsers)
     configure_parser_help(sub_parsers)
@@ -79,8 +80,7 @@ def do_call(args, parser):
     from importlib import import_module
     module = import_module(relative_mod, __name__.rsplit('.', 1)[0])
 
-    exit_code = getattr(module, func_name)(args, parser)
-    return exit_code
+    return getattr(module, func_name)(args, parser)
 
 
 def find_builtin_commands(parser):
@@ -536,11 +536,7 @@ def configure_parser_create(sub_parsers):
         metavar='ENV',
     )
     solver_mode_options, package_install_options = add_parser_create_install_update(p)
-    solver_mode_options.add_argument(
-        "--no-default-packages",
-        action="store_true",
-        help='Ignore create_default_packages in the .condarc file.',
-    )
+    add_parser_default_packages(solver_mode_options)
     p.add_argument(
         '-m', "--mkdir",
         action="store_true",
@@ -861,6 +857,39 @@ def configure_parser_list(sub_parsers):
     )
     p.set_defaults(func='.main_list.execute')
 
+def configure_parser_compare(sub_parsers):
+    descr = "Compare packages between conda environments."
+
+    # Note, the formatting of this is designed to work well with help2man
+    examples = dedent("""
+    Examples:
+
+    Compare packages in the current environment with respect to 'environment.yml':
+
+        conda compare environment.yml
+
+    Compare packages installed into the environment 'myenv' with respect to 'environment.yml':
+
+        conda compare -n myenv environment.yml
+
+    """)
+    p = sub_parsers.add_parser(
+        'compare',
+        description=descr,
+        help=descr,
+        formatter_class=RawDescriptionHelpFormatter,
+        epilog=examples,
+        add_help=False,
+    )
+    add_parser_help(p)
+    add_parser_json(p)
+    add_parser_prefix(p)
+    p.add_argument(
+        'file',
+        action="store",
+        help="Path to the environment file that is to be compared against",
+    )
+    p.set_defaults(func='.main_compare.execute')
 
 def configure_parser_package(sub_parsers):
     descr = "Low-level conda package utility. (EXPERIMENTAL)"
@@ -1057,6 +1086,12 @@ def configure_parser_run(sub_parsers):
         help="Current working directory for command to run in.  Defaults to cwd",
         default=os.getcwd()
     )
+    p.add_argument(
+        "--no-capture-output",
+        help="Don't capture stdout/stderr",
+        action=NullCountAction,
+        default=NULL,
+    )
 
     p.add_argument(
         'executable_call',
@@ -1064,6 +1099,14 @@ def configure_parser_run(sub_parsers):
         help="Executable name, with additional arguments to be passed to the executable "
              "on invocation.",
     )
+
+    p.add_argument(
+        '--live-stream',
+        action="store_true",
+        default=False,
+        help="Display the output for the subprocess stdout and stderr on real time.",
+    )
+
     p.set_defaults(func='.main_run.execute')
 
 
@@ -1415,7 +1458,8 @@ def add_parser_channels(p):
         # TODO: if you ever change 'channel' to 'channels', make sure you modify the context.channels property accordingly # NOQA
         action="append",
         help="""Additional channel to search for packages. These are URLs searched in the order
-        they are given (including file:// for local directories).  Then, the defaults
+        they are given (including local directories using the 'file://'  syntax or
+        simply a path like '/home/conda/mychan' or '../mychan').  Then, the defaults
         or channels from .condarc are searched (unless --override-channels is given).  You can use
         'defaults' to get the default packages for conda.  You can also use any name and the
         .condarc channel_alias value will be prepended.  The default channel_alias
@@ -1439,8 +1483,8 @@ def add_parser_channels(p):
         help=("Specify name of repodata on remote server. Conda will try "
               "whatever you specify, but will ultimately fall back to repodata.json if "
               "your specs are not satisfiable with what you specify here. This is used "
-              "to employ repodata that is reduced in time scope.  You may pass this flag"
-              "more than once.  Leftmost entries are tried first, and the fallback to"
+              "to employ repodata that is reduced in time scope.  You may pass this flag "
+              "more than once.  Leftmost entries are tried first, and the fallback to "
               "repodata.json is added for you automatically.")
     )
     return channel_customization_options
@@ -1620,4 +1664,11 @@ def add_parser_known(p):
         default=False,
         dest='unknown',
         help=SUPPRESS,
+    )
+
+def add_parser_default_packages(p):
+    p.add_argument(
+        "--no-default-packages",
+        action="store_true",
+        help='Ignore create_default_packages in the .condarc file.',
     )

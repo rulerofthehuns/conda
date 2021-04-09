@@ -554,13 +554,16 @@ def parse_arch(raw_arch_string):
     raw_arch_string = raw_arch_string.lower()
 
     # X86
-    if re.match('^i\d86$|^x86$|^x86_32$|^i86pc$|^ia32$|^ia-32$|^bepc$', raw_arch_string):
+    if re.match(r'^i\d86$|^x86$|^x86_32$|^i86pc$|^ia32$|^ia-32$|^bepc$', raw_arch_string):
         arch = 'X86_32'
         bits = 32
     elif re.match('^x64$|^x86_64$|^x86_64t$|^i686-64$|^amd64$|^ia64$|^ia-64$', raw_arch_string):
         arch = 'X86_64'
         bits = 64
     # ARM
+    elif re.match('^arm64$|^arm64[a-z]$|^arm64-[a-z]$', raw_arch_string):
+        arch = 'ARM_8'
+        bits = 64
     elif re.match('^armv8-a|aarch64$', raw_arch_string):
         arch = 'ARM_8'
         bits = 64
@@ -576,6 +579,10 @@ def parse_arch(raw_arch_string):
         bits = 32
     elif re.match('^powerpc$|^ppc64$|^ppc64le$', raw_arch_string):
         arch = 'PPC_64'
+        bits = 64
+    # S390X
+    elif re.match('^s390x$', raw_arch_string):
+        arch = 'S390X'
         bits = 64
     # SPARC
     elif re.match('^sparc32$|^sparc$', raw_arch_string):
@@ -2161,8 +2168,8 @@ def get_cpu_info():
 # Make sure we are running on a supported system
 def _check_arch():
     arch, bits = parse_arch(DataSource.raw_arch_string)
-    if not arch in ['X86_32', 'X86_64', 'ARM_7', 'ARM_8', 'PPC_64']:
-        raise Exception("py-cpuinfo currently only works on X86 and some PPC and ARM CPUs.")
+    if not arch in ['X86_32', 'X86_64', 'ARM_7', 'ARM_8', 'PPC_64', 'S390X']:
+        raise Exception("py-cpuinfo currently only works on X86 and some PPC, S390X and ARM CPUs.")
 
 def main():
     try:

@@ -1,3 +1,379 @@
+## 4.10.0 (2021-03-30)
+
+**NOTE**: This release formally drops support for Python 2.7 and Python < 3.6.
+
+### Enhancements
+
+* Add pilot support for metadata signatures and verification (#10578)
+* Add `__linux` virtual package (#10552, #10561)
+* Support nested keys when using `conda config --get` (#10447, #10572)
+* Support installing default packages when using `conda env create` (#10530)
+* Support HTTP sources for `conda env update -f` (#10536)
+* Make macOS code signing operations less verbose (#10372)
+
+### Bug fixes
+
+* Fix `conda search` crashing on Python 3.9 (#10542)
+* Allow `{channel}::pip` to satisfy pip requirements (#10550)
+* Support `{host}:{port}` specifications in environment YAML files (#10417)
+* Fall back to system `.condarc` if user `.condarc` is absent (#10479)
+* Try UTF-16 if UTF-8 fails when reading environment YAML files (#10356)
+* Properly parse Python version >= 3.10 (#10478)
+* Fix zsh initialization when `$ZDOTDIR` is defined (#10413)
+* Fix path handling for csh (#10410)
+* Fix `setup.py` requirement for vendored `ruamel_yaml_conda` (#10441)
+* Fix errors when pickling vendored `auxlib` objects (#10386)
+
+### Docs
+
+* Document the `__unix` and `__windows` virtual packages (#10511)
+* Update list of supported and default versions of Python (#10531)
+* Favor using `pip` instead of `setup.py` when setting up CI (#10308)
+
+### Miscellaneous
+
+* CI: drop Python 2.7 and add Python 3.9 (#10548)
+
+### Contributors
+
+* @awwad
+* @BastianZim
+* @beenje
+* @bgobbi
+* @blubs
+* @chenghlee
+* @cjmartian
+* @ericpre
+* @erykoff
+* @felker
+* @giladmaya
+* @jamesmyatt
+* @mingwandroid
+* @opoplawski
+* @saadparwaiz1
+* @saucoide
+
+
+## 4.9.2 (2020-11-10)
+
+### Enhancements
+
+* Use vendored `tqdm` in `conda.resolve` for better consistency (#10337)
+
+### Bug fixes
+
+* Revert to previous naming scheme for repodata cache files when
+  `use_only_tar_bz2` config option is false (#10350)
+
+### Docs
+
+* Fix missing release notes (#10342)
+* Fix permission errors when configuring deb repositories (#10347)
+
+### Contributors
+
+* @chenghlee
+* @csoja
+* @dylanmorroll
+* @sscherfke
+
+
+## 4.9.1 (2020-10-26)
+
+### Enhancements
+
+* Respect PEP 440 `~=` "compatible release" clause (#10313)
+
+### Bug fixes
+
+* Remove `preload_openssl` for Win32 (#10298)
+* Add `if exist` to Windows registry hook (#10305)
+
+### Contributors
+
+* @mingwandroid
+
+
+## 4.9.0 (2020-10-19)
+
+### Enhancements:
+
+* Add `osx-arm64` as a recognized platform (#10128, #10134, #10137)
+* Resign files modified during installation on ARM64 macOS (#10260)
+* Add `__archspec` virtual package to identify CPU microarchitecture (#9930)
+* Add `__unix` and `__win` virtual packages (#10214)
+* Add `--no-capture--output` option to `conda run` (#9646)
+* Add `--live-stream` option to `conda run` (#10270)
+* Export and import environment variables set using `conda env config` (#10169)
+* Cache repodata from `file://` channels (#9730)
+* Do not relink already-installed packages (#10208)
+* Speed up JSON formatting in logz module (#10189)
+
+
+### Bug fixes:
+
+* Stop `env remove --dry-run` from actually removing environments (#10261)
+* Virtual package requirements are now considered by the solver (#10057)
+* Fix cached filename processing when using only tar.bz2 (#10193)
+* Stop showing solver hints about CUDA when it is not a dependency (#10275)
+* Ignore virtual packages when checking environment consistency (#10196)
+* Fix `config --json` output errors in certain circumstances (#10194)
+* More consistent error handling by `conda shell` (#10238)
+* Bump vendored version of tqdm to fix various threading and I/O bugs (#10266)
+
+
+### Docs:
+
+* Correctly state default `/AddToPath` option in Windows installer (#10179)
+* Fix typos in `--repodata-fn` help text (#10279)
+
+
+### Miscellaneous:
+
+* Update CI infrastructure to use GitHub Actions (#10176, #10186, #10234)
+* Update README badge to show GitHub Actions status (#10254)
+
+
+### Contributors
+
+* @AlbertDeFusco
+* @angloyna
+* @bbodenmiller
+* @casperdcl
+* @chenghlee
+* @chrisburr
+* @cjmartian
+* @dhirschfeld
+* @ericpre
+* @gabrielcnr
+* @InfiniteChai
+* @isuruf
+* @jjhelmus
+* @LorcanHamill
+* @maresb
+* @mingwandroid
+* @mlline00
+* @xhochy
+* @ydmytryk
+
+
+## 4.8.5 (2020-09-14)
+
+### Enhancements
+
+* Add `osx-arm64` as a recognized platform (#10128, #10134)
+
+### Contributors
+
+* @isuruf
+* @jjhelmus
+
+
+## 4.8.4 (2020-08-06)
+
+### Enhancements:
+
+* Add `linux-ppc64` as a recognized platform (#9797, #9877)
+* Add `linux-s390x` as a recognized platform (#9933, #10051)
+* Add spinner to pip installer (#10032)
+* Add support for running conda in PyPy (#9764)
+* Support creating conda environments using remote specification files (#9835)
+* Allow request retries on various HTTP errors (#9919)
+* Add `compare` command for environments against a specification file (#10022)
+* Add (preliminary) support for JSON-format activation (#8727)
+* Properly handle the `CURL_CA_BUNDLE` environment variable (#10078)
+* More uniformly handle `$CONDA_PREFIX` when exporting environments (#10092)
+* Enable trailing `_` to anchor OpenSSL-like versions (#9859)
+* Replace `listdir` and `glob` with `scandir` (#9889)
+* Ignore virtual packages when searching for constrained packages (#10117)
+* Add virtual packages to be considered in the solver (#10057)
+
+### Bug fixes:
+
+* Prevent `remove --all` from deleting non-environment directories (#10086)
+* Prevent `create --dry-run --yes` from deleting existing environments (#10090)
+* Remove extra newline from environment export file (#9649)
+* Print help on incomplete `conda env config` command rather than crashing (#9660)
+* Correctly set exit code/errorlevel when `conda run` exits (#9665)
+* Send "inconsistent environment" warnings to stderr to avoid breaking JSON output (#9738)
+* Fix output formatting from post-link scripts (#9841)
+* Fix URL parsing for channel subdirs (#9844)
+* Fix `conda env export -f` sometimes producing empty output files (#9909)
+* Fix handling of Python releases with two-digit minor versions (#9999)
+* Do not use gid to determine if user is an admin on \*nix platforms (#10002)
+* Suppress spurious xonsh activation warnings (#10005)
+* Fix crash when running `conda update --all` on a nonexistent environment (#10028)
+* Fix collections import for Python 3.8 (#10093)
+* Fix regex-related deprecation warnings (#10093, #10096)
+* Fix logic error when running under Python 2.7 on 64-bit platforms (#10108)
+* Fix Python 3.8 leaked semaphore issue (#10115)
+
+### Docs:
+
+* Fix formatting and typos (#9623, #9689, #9898, #10042)
+* Correct location for yum repository configuration files (#9988)
+* Clarify usage for the `--channel` option (#10054)
+* Clarify Python is not installed by default into new environments (#10089)
+
+### Miscellaneous:
+
+* Fixes to tests and CI pipelines (#9842, #9863, #9938, #9960, #10010)
+* Remove conda-forge dependencies for developing conda (#9857, #9871)
+* Audit YAML usage for `safe_load` vs `round_trip_load` (#9902)
+
+### Contributors:
+
+* @alanhdu
+* @angloyna
+* @Anthchirp
+* @Arrowbox
+* @bbodenmiller
+* @beenje
+* @bernardoduarte
+* @birdsarah
+* @bnemanich
+* @chenghlee
+* @ChihweiLHBird
+* @cjmartian
+* @ericpre
+* @error404-beep
+* @esc
+* @hartb
+* @hugobuddel
+* @isuruf
+* @jjhelmus
+* @kalefranz
+* @mingwandroid
+* @mlline00
+* @mparry
+* @mrocklin
+* @necaris
+* @pdnm
+* @pradghos
+* @ravigumm
+* @Reissner
+* @scopatz
+* @sidhant007
+* @songmeixu
+* @speleo3
+* @tomsaleeba
+* @WinstonPais
+
+
+## 4.8.3 (2020-03-13)
+
+### Docs:
+
+* Add release notes for 4.8.2 to docs (#9632)
+* Fix typos in docs (#9637, #9643)
+* Grammatical and formatting changes (#9647)
+
+### Bug fixes:
+
+* Account for channel is specs (#9748)
+
+### Contributors:
+
+* @bernardoduarte
+* @forrestwaters
+* @jjhelmus
+* @msarahan
+* @rrigdon
+* @timgates42
+
+
+## 4.8.2 (2020-01-24)
+
+### Enhancements:
+
+* Solver messaging improvements (#9560)
+
+### Docs:
+
+* Added precedence and conflict info  (#9565)
+* Added how to set env variables with config API  (#9536)
+* Updated user guide, deleted Overview, minor clean up (#9581)
+* Add code of conduct (#9601, #9602, #9603, #9603, #9604 #9605)
+
+### Bug fixes:
+
+* change fish prompt only if changeps1 is true  (#7000)
+* make frozendict JSON serializable (#9539)
+* Conda env create empty dir (#9543)
+
+
+### Contributors:
+
+* @msarahan
+* @jjhelmus
+* @rrigdon
+* @soapy1
+* @teake
+* @csoja
+* @kfranz
+
+## 4.8.1 (2019-12-19)
+
+### Enhancements:
+
+* improve performance for conda run by avoiding Popen.communicate  (#9381)
+* Put conda keyring in /usr/share/keyrings on Debian (#9424)
+* refactor common.logic to fix some bugs and prepare for better modularity (#9427)
+* Support nested configuration  (#9449)
+* Support Object configuration parameters  (#9465)
+* Use freeze_installed to speed up conda env update  (#9511)
+* add networking args to conda env create (#9525)
+
+### Docs:
+
+* fix string concatenation running words together regarding CONDA_EXE  (#9411)
+* Fix typo ("list" -> "info")  (#9433)
+* typo in condarc key envs_dirs  (#9478)
+* Clarify channel priority and package sorting (#9492)
+* improve description of DLL loading verification and activating environments  (#9453)
+* Installing with specific build number  (#9534)
+
+### Bug fixes:
+
+* Fix calling python api run_command with list and string arguments  (#9331)
+* revert init bash completion  (#9421)
+* set tmp to shortened path that excludes spaces (#9409)
+* avoid function redefinition upon resourcing conda.fish  (#9444)
+* propagate pip error level when creating envs with conda env (#9460)
+* fix incorrect chown call (#9464)
+* Add subdir to PackageRecord dist_str  (#9418)
+* Fix running conda activate in multiple processes on windows  (#9477)
+* Don't check in pkgs for trash (#9472)
+* remove setuptools from run_constrained in recipe  (#9485)
+* Fix `__conda_activate` function to correctly return exit code  (#9532)
+* fix overly greedy capture done by subprocess for conda run  (#9537)
+
+
+### Contributors:
+
+* @AntoinePrv
+* @brettcannon
+* @bwildenhain
+* @cjmartian
+* @felker
+* @forrestwaters
+* @gilescope
+* @isuruf
+* @jeremyjliu
+* @jjhelmus
+* @jhultman
+* @marcuscaisey
+* @mbargull
+* @mingwandroid
+* @msarahan
+* @okhoma
+* @osamoylenko
+* @rrigdon
+* @rulerofthehuns
+* @soapy1
+* @tartansandal
+
+
 ## 4.8.0rc0 (2019-11-04)
 
 ### Enhancements:

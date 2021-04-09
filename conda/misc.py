@@ -15,7 +15,7 @@ import shutil
 import sys
 
 from .base.context import context
-from .common.compat import itervalues, on_win, open
+from .common.compat import itervalues, on_win, open, scandir
 from .common.path import expand
 from .common.url import is_url, join_url, path_to_url
 from .core.index import get_index
@@ -97,10 +97,14 @@ def explicit(specs, prefix, verbose=False, force_extract=True, index_args=None, 
 
         prec = prefix_data.get(pcrec.name, None)
         if prec:
-            precs_to_remove.append(prec)
+            # If we've already got matching specifications, then don't bother re-linking it
+            if next(prefix_data.query(new_spec), None):
+                specs_pcrecs[q][0] = None
+            else:
+                precs_to_remove.append(prec)
 
-    stp = PrefixSetup(prefix, precs_to_remove, tuple(sp[1] for sp in specs_pcrecs),
-                      (), tuple(sp[0] for sp in specs_pcrecs), ())
+    stp = PrefixSetup(prefix, precs_to_remove, tuple(sp[1] for sp in specs_pcrecs if sp[0]),
+                      (), tuple(sp[0] for sp in specs_pcrecs if sp[0]), ())
 
     txn = UnlinkLinkTransaction(stp)
     txn.execute()
@@ -125,7 +129,7 @@ def walk_prefix(prefix, ignore_predefined_files=True, windows_forward_slashes=Tr
     binignore = {'conda', 'activate', 'deactivate'}
     if sys.platform == 'darwin':
         ignore.update({'python.app', 'Launcher.app'})
-    for fn in os.listdir(prefix):
+    for fn in (entry.name for entry in scandir(prefix)):
         if ignore_predefined_files and fn in ignore:
             continue
         if isfile(join(prefix, fn)):

@@ -9,8 +9,8 @@ Installation
 The fastest way to :doc:`obtain <download>` conda is to install
 :ref:`Miniconda <miniconda-glossary>`, a mini version of
 :ref:`Anaconda <anaconda-glossary>` that includes only conda and
-its dependencies. If you prefer to have conda plus over 720 open
-source packages, install Anaconda.
+its dependencies. If you prefer to have conda plus over 7,500 open-source
+packages, install Anaconda.
 
 We recommend you install Anaconda for the local user, which does
 not require administrator permissions and is the most robust
@@ -21,6 +21,7 @@ For information on using our graphical installers for
 Windows or macOS, see the instructions for
 `installing Anaconda <http://docs.continuum.io/anaconda/install.html>`_.
 
+.. _system-reqs:
 
 System requirements
 ===================
@@ -32,12 +33,8 @@ System requirements
 * For Anaconda---Minimum 3 GB disk space to download and install.
 
 
-* Windows, macOS or Linux.
+* Windows, macOS, or Linux.
 
-* Python 2.7, 3.4, 3.5 or 3.6.
-* pycosat.
-* PyYaml.
-* Requests.
 
 .. note::
    You do not need administrative or root permissions to
@@ -87,15 +84,15 @@ variable.
 To see if the conda installation of Python is in your PATH
 variable:
 
-* On macOS and Linux, open the terminal and run---``echo $PATH``.
-
 * On Windows, open an Anaconda Prompt and run---``echo %PATH%``.
+
+* On macOS and Linux, open the terminal and run---``echo $PATH``.
 
 To see which Python installation is currently set as the default:
 
-* On macOS and Linux, open the terminal and run---``which python``.
-
 * On Windows, open an Anaconda Prompt and run---``where python``.
+
+* On macOS and Linux, open the terminal and run---``which python``.
 
 To see which packages are installed in your current conda
 environment and their version numbers, in your terminal window
@@ -109,5 +106,4 @@ or an Anaconda Prompt, run ``conda list``.
    windows
    macos
    linux
-   test-installation
    rpm-debian

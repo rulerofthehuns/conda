@@ -4,6 +4,7 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
 
 import logging
+from os.path import isfile, join
 import sys
 
 from .common import check_non_admin, specs_from_args
@@ -13,9 +14,10 @@ from ..core.envs_manager import unregister_env
 from ..core.link import PrefixSetup, UnlinkLinkTransaction
 from ..core.prefix_data import PrefixData
 from ..core.solve import Solver
-from ..exceptions import CondaEnvironmentError, CondaValueError
+from ..exceptions import CondaEnvironmentError, CondaValueError, DirectoryNotACondaEnvironmentError
 from ..gateways.disk.delete import rm_rf, path_is_clean
 from ..models.match_spec import MatchSpec
+from ..exceptions import PackagesNotFoundError
 
 log = logging.getLogger(__name__)
 
@@ -53,6 +55,8 @@ def execute(args, parser):
         if prefix == context.root_prefix:
             raise CondaEnvironmentError('cannot remove root environment,\n'
                                         '       add -n NAME or -p PREFIX option')
+        if not isfile(join(prefix, 'conda-meta', 'history')):
+            raise DirectoryNotACondaEnvironmentError(prefix)
         print("\nRemove all packages in environment %s:\n" % prefix, file=sys.stderr)
 
         if 'package_names' in args:
@@ -65,10 +69,13 @@ def execute(args, parser):
                 neutered_specs={},
             )
             txn = UnlinkLinkTransaction(stp)
-            handle_txn(txn, prefix, args, False, True)
-
-        rm_rf(prefix, clean_empty_parents=True)
-        unregister_env(prefix)
+            try:
+                handle_txn(txn, prefix, args, False, True)
+            except PackagesNotFoundError:
+                print("No packages found in %s. Continuing environment removal" % prefix)
+        if not context.dry_run:
+            rm_rf(prefix, clean_empty_parents=True)
+            unregister_env(prefix)
 
         return
 
